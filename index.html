@@ -591,6 +591,25 @@
   <div class="sec-title">Advisor Notes & Highlights</div>
   <div class="notes-feed" id="notesFeed"></div>
 
+  <!-- RAFFLE ENTRIES -->
+  <div class="sec-title">Raffle Entries — GST Day Submissions</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Advisor</th>
+          <th>Unit</th>
+          <th>GST Date</th>
+          <th>Green Days</th>
+          <th>Red Days</th>
+          <th>Entries Submitted</th>
+          <th>Submitted At</th>
+        </tr>
+      </thead>
+      <tbody id="raffleTable"></tbody>
+    </table>
+  </div>
+
 </div><!-- /page -->
 </div><!-- /dashboard -->
 
@@ -730,6 +749,7 @@ async function init() {
   const today = new Date().toISOString().split('T')[0];
   document.getElementById('filterDate').value = today;
   await refreshScopedLogs();
+  await refreshRaffleEntries();
   populateAdvisorFilter();
   populateUnitFilter();
   renderDashboard();
@@ -750,12 +770,29 @@ async function refreshScopedLogs() {
   }
 }
 
+// Fetches raffle (GST Day) submissions — all units if admin, otherwise just this manager's team.
+let raffleEntriesCache = [];
+async function refreshRaffleEntries() {
+  try {
+    const url = currentManager.isAdmin
+      ? `${APPS_SCRIPT_URL}?action=getAllRaffle`
+      : `${APPS_SCRIPT_URL}?action=getRaffleForManager&manager=${encodeURIComponent(currentManager.name)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    raffleEntriesCache = data.entries || [];
+  } catch (err) {
+    console.error('Could not load raffle entries:', err);
+    raffleEntriesCache = [];
+  }
+}
+
 function getScopedLogs() {
   return scopedLogsCache;
 }
 
 async function handleRefresh() {
   await refreshScopedLogs();
+  await refreshRaffleEntries();
   populateAdvisorFilter();
   populateUnitFilter();
   renderDashboard();
@@ -824,6 +861,7 @@ function renderDashboard() {
   renderTable(entries);
   renderBreakdown(entries);
   renderNotes(entries);
+  renderRaffleTable();
 }
 
 function renderKPIs(entries) {
@@ -910,6 +948,40 @@ function renderNotes(entries) {
       </div>
     </div>`;
   }).join('');
+}
+
+// ── RAFFLE ENTRIES ────────────────────────────────────────
+function renderRaffleTable() {
+  const tbody = document.getElementById('raffleTable');
+  const dateFilter = document.getElementById('filterDate').value;
+  const unitFilterEl = document.getElementById('filterUnit');
+  const unitFilter = unitFilterEl ? unitFilterEl.value : '';
+  const advisorFilter = document.getElementById('filterAdvisor').value;
+
+  let entries = raffleEntriesCache.slice();
+  if (dateFilter) entries = entries.filter(e => e.date === dateFilter);
+  if (unitFilter) entries = entries.filter(e => e.advisor?.team === unitFilter);
+  if (advisorFilter) entries = entries.filter(e => e.advisor?.name === advisorFilter);
+
+  if (!entries.length) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">No raffle entries submitted for this date / filter.</div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = entries
+    .sort((a, b) => String(b.submittedAt || '').localeCompare(String(a.submittedAt || '')))
+    .map(e => {
+      const subTime = e.submittedAt ? new Date(e.submittedAt).toLocaleString('en-PH') : '—';
+      return `<tr>
+        <td><strong>${e.advisor?.name || '—'}</strong><br><span style="font-size:11px;color:var(--muted);">${e.advisor?.code || ''}</span></td>
+        <td style="font-size:12px;color:var(--muted);">${e.advisor?.team || '—'}</td>
+        <td style="font-size:12px;">${e.date}</td>
+        <td style="text-align:center;font-weight:600;color:#27AE60;">${e.greenCount}</td>
+        <td style="text-align:center;font-weight:600;color:#E74C3C;">${e.redCount}</td>
+        <td style="text-align:center;font-weight:700;color:var(--gold);">${e.entriesSubmitted}</td>
+        <td style="font-size:12px;">${subTime}</td>
+      </tr>`;
+    }).join('');
 }
 
 // ── MONTHLY BOARD ─────────────────────────────────────────
