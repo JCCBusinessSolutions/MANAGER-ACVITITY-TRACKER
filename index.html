@@ -137,7 +137,22 @@
     overflow: hidden;
     margin-bottom: 28px;
   }
-  table { width: 100%; border-collapse: collapse; }
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  table { width: 100%; min-width: 640px; border-collapse: collapse; }
+  .scroll-hint {
+    display: none;
+    font-family: 'Inter', sans-serif;
+    font-size: 10.5px;
+    color: var(--muted);
+    text-align: center;
+    padding: 8px 0 2px;
+  }
+  @media (max-width: 700px) {
+    .scroll-hint { display: block; }
+  }
   thead { background: var(--navy); }
   thead th {
     padding: 13px 16px;
@@ -358,7 +373,6 @@
   @media (max-width: 600px) {
     .page { padding: 16px 12px 40px; }
     .kpi-row { grid-template-columns: 1fr 1fr; }
-    thead th:nth-child(3), tbody td:nth-child(3) { display: none; }
   }
 
   /* ── MONTHLY BOARD (MANAGER) ── */
@@ -616,6 +630,7 @@
   <!-- ADVISOR TABLE -->
   <div class="sec-title">Advisor Activity Log</div>
   <div class="table-wrap">
+    <div class="table-scroll">
     <table>
       <thead>
         <tr>
@@ -631,7 +646,9 @@
       </thead>
       <tbody id="advisorTable"></tbody>
     </table>
+    </div>
   </div>
+  <div class="scroll-hint">&larr; Swipe to see more &rarr;</div>
 
   <!-- ACTIVITY BREAKDOWN -->
   <div class="sec-title">Activity Totals (Selected Period)</div>
@@ -644,6 +661,7 @@
   <!-- RAFFLE ENTRIES -->
   <div class="sec-title">Raffle Entries — GST Day Submissions</div>
   <div class="table-wrap">
+    <div class="table-scroll">
     <table>
       <thead>
         <tr>
@@ -658,7 +676,9 @@
       </thead>
       <tbody id="raffleTable"></tbody>
     </table>
+    </div>
   </div>
+  <div class="scroll-hint">&larr; Swipe to see more &rarr;</div>
 
   <!-- CONTROL CENTER (Sales Manager admin only) -->
   <div id="controlCenterWrap" style="display:none;">
