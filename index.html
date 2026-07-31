@@ -305,6 +305,56 @@
   .gtab.active { background: var(--navy); color: var(--gold); border-color: var(--navy); }
   .gtab:hover:not(.active) { border-color: var(--gold); }
 
+  /* ── CONTROL CENTER ── */
+  .control-center-card {
+    background: var(--navy);
+    border-radius: 14px;
+    padding: 26px 24px;
+    margin-bottom: 28px;
+    border: 1px solid rgba(184,147,94,0.3);
+    max-width: 420px;
+  }
+  .cc-desc { font-size: 12.5px; color: rgba(255,255,255,0.7); margin-bottom: 14px; line-height: 1.5; }
+  #ccLocked input, #ccUnlocked input {
+    width: 100%;
+    padding: 11px 14px;
+    border: 1.5px solid rgba(184,147,94,0.35);
+    border-radius: 8px;
+    font-family: 'Inter', sans-serif;
+    font-size: 13.5px;
+    color: var(--navy);
+    background: var(--white);
+    outline: none;
+    margin-bottom: 12px;
+  }
+  #ccLocked input:focus, #ccUnlocked input:focus { border-color: var(--gold); }
+  .cc-btn {
+    width: 100%;
+    padding: 12px;
+    background: var(--gold);
+    color: var(--navy);
+    border: none;
+    border-radius: 8px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background .2s;
+  }
+  .cc-btn:hover { background: var(--gold-light); }
+  .cc-error { color: #E08A80; font-size: 12px; margin-top: 10px; display: none; }
+  .cc-status { color: #7FCF9F; font-size: 12px; margin-top: 10px; display: none; }
+  .cc-field { margin-bottom: 14px; text-align: left; }
+  .cc-field label {
+    display: block;
+    font-size: 10.5px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--gold);
+    margin-bottom: 6px;
+  }
+
   @media (max-width: 600px) {
     .page { padding: 16px 12px 40px; }
     .kpi-row { grid-template-columns: 1fr 1fr; }
@@ -610,6 +660,36 @@
     </table>
   </div>
 
+  <!-- CONTROL CENTER (Sales Manager admin only) -->
+  <div id="controlCenterWrap" style="display:none;">
+    <div class="sec-title">Control Center</div>
+    <div class="control-center-card">
+
+      <!-- Locked state: requires exact authorized email before showing fields -->
+      <div id="ccLocked">
+        <p class="cc-desc">Enter the authorized admin email to edit GST Day and Raffle Start Date.</p>
+        <input type="email" id="ccEmailInput" placeholder="Authorized email address">
+        <button class="cc-btn" onclick="unlockControlCenter()">Unlock</button>
+        <div class="cc-error" id="ccEmailError">That email is not authorized to edit these settings.</div>
+      </div>
+
+      <!-- Unlocked state: actual settings form -->
+      <div id="ccUnlocked" style="display:none;">
+        <div class="cc-field">
+          <label>GST Day Date</label>
+          <input type="date" id="ccGstDate">
+        </div>
+        <div class="cc-field">
+          <label>Raffle Start Date</label>
+          <input type="date" id="ccRaffleStartDate">
+        </div>
+        <button class="cc-btn" onclick="saveControlCenterSettings()">Save Settings</button>
+        <div class="cc-status" id="ccStatus"></div>
+      </div>
+
+    </div>
+  </div>
+
 </div><!-- /page -->
 </div><!-- /dashboard -->
 
@@ -735,11 +815,13 @@ async function enterDashboard() {
     document.getElementById('logoSubText').textContent = 'Sales Team — All Units';
     document.getElementById('mgrBadgeText').textContent = 'Sales Manager Access';
     document.getElementById('unitFilterWrap').style.display = 'flex';
+    document.getElementById('controlCenterWrap').style.display = 'block';
   } else {
     const unitLabel = currentManager.unit ? `${currentManager.unit} — ${currentManager.name}` : currentManager.name;
     document.getElementById('logoSubText').textContent = unitLabel;
     document.getElementById('mgrBadgeText').textContent = currentManager.name;
     document.getElementById('unitFilterWrap').style.display = 'none';
+    document.getElementById('controlCenterWrap').style.display = 'none';
   }
   await init();
 }
@@ -753,6 +835,78 @@ async function init() {
   populateAdvisorFilter();
   populateUnitFilter();
   renderDashboard();
+}
+
+// ── CONTROL CENTER (GST Day / Raffle Start Date) ────────────
+// Client-side check here is just for immediate feedback — the real
+// authorization check happens server-side in updateSettings() in Code.gs,
+// so this can't be bypassed by editing the page.
+const AUTHORIZED_SETTINGS_EMAIL = 'castrojaymar0916@gmail.com';
+
+function unlockControlCenter() {
+  const email = document.getElementById('ccEmailInput').value.trim().toLowerCase();
+  const errEl = document.getElementById('ccEmailError');
+  if (email !== AUTHORIZED_SETTINGS_EMAIL) {
+    errEl.style.display = 'block';
+    return;
+  }
+  errEl.style.display = 'none';
+  document.getElementById('ccLocked').style.display = 'none';
+  document.getElementById('ccUnlocked').style.display = 'block';
+  loadControlCenterSettings();
+}
+
+async function loadControlCenterSettings() {
+  try {
+    const res = await fetch(`${APPS_SCRIPT_URL}?action=getSettings`);
+    const data = await res.json();
+    document.getElementById('ccGstDate').value = data.gstDate || '';
+    document.getElementById('ccRaffleStartDate').value = data.raffleStartDate || '';
+  } catch (err) {
+    console.error('Could not load settings:', err);
+  }
+}
+
+async function saveControlCenterSettings() {
+  const gstDate = document.getElementById('ccGstDate').value;
+  const raffleStartDate = document.getElementById('ccRaffleStartDate').value;
+  const statusEl = document.getElementById('ccStatus');
+  statusEl.style.display = 'none';
+
+  const btn = document.querySelector('#ccUnlocked .cc-btn');
+  const originalText = btn.textContent;
+  btn.textContent = 'Saving...';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'updateSettings',
+        gstDate,
+        raffleStartDate,
+        editorEmail: document.getElementById('ccEmailInput').value.trim(),
+      }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      statusEl.textContent = 'Settings saved.';
+      statusEl.style.color = '#7FCF9F';
+      statusEl.style.display = 'block';
+    } else {
+      statusEl.textContent = data.message || 'Could not save settings.';
+      statusEl.style.color = '#E08A80';
+      statusEl.style.display = 'block';
+    }
+  } catch (err) {
+    statusEl.textContent = 'Connection error. Please try again.';
+    statusEl.style.color = '#E08A80';
+    statusEl.style.display = 'block';
+  } finally {
+    btn.textContent = originalText;
+    btn.disabled = false;
+  }
 }
 
 // Fetches team logs from the backend — all units if admin, otherwise just this manager's team.
