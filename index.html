@@ -1306,7 +1306,7 @@ function renderMonthlyBoard() {
     const isPast = dateKey < today;
     const isFuture = dateKey > today;
     const dow = new Date(year, month, d).getDay();
-    const isWeekend = dow === 0 || dow === 6;
+    const isRestDay = dow === 0; // Sunday only — Saturday now counts toward red days
 
     let cell = document.createElement('div');
     cell.className = 'tmb-cell';
@@ -1315,7 +1315,7 @@ function renderMonthlyBoard() {
       cell.classList.add('future');
       cell.innerHTML = `<span class="tn" style="color:#ccc;">${d}</span>`;
     } else if (advisorNames.length === 0) {
-      cell.classList.add(isPast && !isWeekend ? 'all-red' : 'future');
+      cell.classList.add(isPast && !isRestDay ? 'all-red' : 'future');
       cell.innerHTML = `<span class="tn">${d}</span>`;
     } else {
       const logsOnDay = advisorNames.filter(n => advisorMap[n].logs[dateKey]);
@@ -1324,11 +1324,11 @@ function renderMonthlyBoard() {
       const pct = count / total;
 
       let colorCls;
-      if (isWeekend && count === 0) colorCls = 'future';
+      if (isRestDay && count === 0) colorCls = 'future';
       else if (pct === 1) { colorCls = 'all-green'; teamLoggedDays++; }
       else if (pct >= 0.5) { colorCls = 'most-green'; teamPartialDays++; }
       else if (pct > 0 && pct < 0.5) { colorCls = 'partial'; teamPartialDays++; }
-      else if (isPast && !isWeekend) { colorCls = 'all-red'; teamMissedDays++; }
+      else if (isPast && !isRestDay) { colorCls = 'all-red'; teamMissedDays++; }
       else colorCls = 'future';
 
       cell.classList.add(colorCls, 'clickable');
@@ -1373,14 +1373,14 @@ function renderMonthlyBoard() {
       const isPast = dateKey < today;
       const isFuture = dateKey > today;
       const dow = new Date(year, month, d).getDay();
-      const isWeekend = dow === 0 || dow === 6;
+      const isRestDay = dow === 0; // Sunday only — Saturday now counts toward red days
       const entry = adv.logs[dateKey];
       const actCount = entry ? Object.keys(entry.activities || {}).length : 0;
 
       let cls = 'amb-cell';
       if (isFuture) cls += ' future';
       else if (entry) { cls += ' green clickable'; loggedD++; }
-      else if (isPast && !isWeekend) { cls += ' red'; missedD++; }
+      else if (isPast && !isRestDay) { cls += ' red'; missedD++; }
       else cls += ' future';
       if (isToday) cls += ' today-cell';
 
@@ -1417,7 +1417,7 @@ function countMgrWorkdays(year, month, upToDay) {
   let count = 0;
   for (let d = 1; d <= upToDay; d++) {
     const dow = new Date(year, month, d).getDay();
-    if (dow !== 0 && dow !== 6) count++;
+    if (dow !== 0) count++; // Sunday is the only rest day now
   }
   return count;
 }
