@@ -61,6 +61,67 @@
     padding: 7px 16px;
   }
   .mgr-badge span { font-size: 11.5px; color: var(--gold); font-weight: 500; letter-spacing: 0.4px; }
+  .raffle-draw-btn {
+    margin-left: 12px;
+    background: transparent;
+    border: 1px solid var(--gold-dim);
+    color: var(--gold);
+    padding: 7px 16px;
+    border-radius: 4px;
+    font-family: 'Inter', sans-serif;
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: 0.4px;
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .raffle-draw-btn:hover { background: rgba(184,147,94,0.12); border-color: var(--gold); }
+
+  /* ── RAFFLE FRAME OVERLAY ── */
+  .raffle-frame-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    z-index: 800;
+    display: none;
+    flex-direction: column;
+  }
+  .raffle-frame-overlay.open { display: flex; }
+  .raffle-frame-bar {
+    height: 52px;
+    background: var(--navy);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 18px;
+    flex-shrink: 0;
+    border-bottom: 1px solid rgba(184,147,94,0.25);
+  }
+  .raffle-frame-back {
+    background: transparent;
+    border: 1px solid var(--gold-dim);
+    color: var(--gold);
+    padding: 6px 14px;
+    border-radius: 4px;
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .raffle-frame-back:hover { background: rgba(184,147,94,0.12); }
+  .raffle-frame-label {
+    font-family: 'Cormorant Garamond', serif;
+    color: var(--gold);
+    font-size: 14px;
+    letter-spacing: 0.3px;
+  }
+  .raffle-frame-overlay iframe {
+    flex: 1;
+    width: 100%;
+    border: none;
+  }
 
   /* ── LAYOUT ── */
   .page { max-width: 1100px; margin: 0 auto; padding: 28px 20px 60px; }
@@ -561,6 +622,7 @@
   <div class="mgr-badge">
     <span id="mgrBadgeText">Manager View</span>
   </div>
+  <button class="raffle-draw-btn" id="raffleDrawBtn" onclick="openRaffleFrame()" style="display:none;">Raffle Draw →</button>
 </header>
 
 <div class="page">
@@ -713,6 +775,16 @@
 </div><!-- /page -->
 </div><!-- /dashboard -->
 
+<!-- RAFFLE DRAW (embedded, Sales Manager admin only) -->
+<div class="raffle-frame-overlay" id="raffleFrameOverlay">
+  <div class="raffle-frame-bar">
+    <button class="raffle-frame-back" onclick="closeRaffleFrame()">← Back to Dashboard</button>
+    <span class="raffle-frame-label">Raffle Draw</span>
+    <span style="width:140px;"></span>
+  </div>
+  <iframe id="raffleFrameIframe" title="Raffle Draw"></iframe>
+</div>
+
 <script>
 // ── CONFIG ───────────────────────────────────────────────
 // Paste your deployed Google Apps Script Web App URL here (see Code.gs).
@@ -836,12 +908,14 @@ async function enterDashboard() {
     document.getElementById('mgrBadgeText').textContent = 'Sales Manager Access';
     document.getElementById('unitFilterWrap').style.display = 'flex';
     document.getElementById('controlCenterWrap').style.display = 'block';
+    document.getElementById('raffleDrawBtn').style.display = 'inline-block';
   } else {
     const unitLabel = currentManager.unit ? `${currentManager.unit} — ${currentManager.name}` : currentManager.name;
     document.getElementById('logoSubText').textContent = unitLabel;
     document.getElementById('mgrBadgeText').textContent = currentManager.name;
     document.getElementById('unitFilterWrap').style.display = 'none';
     document.getElementById('controlCenterWrap').style.display = 'none';
+    document.getElementById('raffleDrawBtn').style.display = 'none';
   }
   await init();
 }
@@ -862,6 +936,25 @@ async function init() {
 // authorization check happens server-side in updateSettings() in Code.gs,
 // so this can't be bypassed by editing the page.
 const AUTHORIZED_SETTINGS_EMAIL = 'castrojaymar0916@gmail.com';
+
+// ── RAFFLE DRAW (embedded frame, admin-only) ────────────────
+// Relative path — works as long as gge-raffle-wheel.html sits in this same
+// GitHub Pages repo, right next to gge-manager-dashboard.html.
+const RAFFLE_WHEEL_URL = "gge-raffle-wheel.html";
+let raffleFrameLoaded = false;
+
+function openRaffleFrame() {
+  const iframe = document.getElementById('raffleFrameIframe');
+  if (!raffleFrameLoaded) {
+    iframe.src = RAFFLE_WHEEL_URL;
+    raffleFrameLoaded = true;
+  }
+  document.getElementById('raffleFrameOverlay').classList.add('open');
+}
+
+function closeRaffleFrame() {
+  document.getElementById('raffleFrameOverlay').classList.remove('open');
+}
 
 function unlockControlCenter() {
   const email = document.getElementById('ccEmailInput').value.trim().toLowerCase();
