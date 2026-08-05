@@ -794,6 +794,7 @@ const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz3kBCO842j8u9M
 const ADMIN_PIN = "999000";
 let currentManager = null;
 let scopedLogsCache = {};
+let raffleEntriesCache = [];
 
 const ALL_ACTIVITIES = [
   { id: "posting_products",    icon: "📢", label: "Posted Products" },
@@ -921,14 +922,76 @@ async function enterDashboard() {
 }
 
 // ── INIT ─────────────────────────────────────────────────
-async function init() {
-  const today = new Date().toISOString().split('T')[0];
-  document.getElementById('filterDate').value = today;
-  await refreshScopedLogs();
-  await refreshRaffleEntries();
+const MANAGER_BUNDLE_CACHE_PREFIX = 'gge_manager_bundle_';
+
+// Cache is keyed per manager identity — different managers (or the admin
+// view) see different scoped data, so they must never share a cache slot.
+function managerBundleCacheKey() {
+  const safeName = (currentManager.name || 'unknown').replace(/[^a-zA-Z0-9]/g, '_');
+  return `${MANAGER_BUNDLE_CACHE_PREFIX}${safeName}_${currentManager.isAdmin ? 'admin' : 'team'}`;
+}
+
+// Applies a logs+raffle bundle (from cache OR a fresh network response) to
+// state and re-renders the dashboard. Called twice in the normal flow —
+// once instantly with stale cached data, once again silently once the
+// real network response lands.
+function applyManagerBundleAndRender(bundle) {
+  scopedLogsCache = {};
+  (bundle.logs || []).forEach(l => { scopedLogsCache[`${l.date}_${l.advisor.name}`] = l; });
+  raffleEntriesCache = bundle.raffleEntries || [];
+
   populateAdvisorFilter();
   populateUnitFilter();
   renderDashboard();
+}
+
+async function init() {
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('filterDate').value = today;
+
+  // ── STALE-WHILE-REVALIDATE (same pattern as the Advisor Tracker) ──
+  // Render instantly from last session's cached data for THIS manager
+  // identity, before any network call — then quietly replace it with the
+  // real current data moments later. Turns a multi-second blank dashboard
+  // into an instantly-usable one for every login after the first.
+  const cacheKey = managerBundleCacheKey();
+  const cachedRaw = localStorage.getItem(cacheKey);
+  let hadCache = false;
+  if (cachedRaw) {
+    try {
+      applyManagerBundleAndRender(JSON.parse(cachedRaw));
+      hadCache = true;
+    } catch (err) {
+      // Corrupt cache — ignore, the network fetch below will populate fresh.
+    }
+  }
+
+  await fetchManagerBundle(hadCache);
+}
+
+// Fetches team logs + raffle entries in ONE combined backend call instead
+// of two sequential ones — the old code awaited them back to back, which
+// was the single biggest cause of the manager dashboard's slow login.
+async function fetchManagerBundle(hadCache) {
+  try {
+    const url = `${APPS_SCRIPT_URL}?action=getManagerBundle&manager=${encodeURIComponent(currentManager.name)}&isAdmin=${currentManager.isAdmin ? 'true' : 'false'}`;
+    const res = await fetch(url);
+    const bundle = await res.json();
+    applyManagerBundleAndRender(bundle);
+    localStorage.setItem(managerBundleCacheKey(), JSON.stringify(bundle));
+  } catch (err) {
+    console.error('Could not load manager bundle:', err);
+    if (!hadCache) {
+      // No cache and the network failed — genuinely nothing to show.
+      scopedLogsCache = {};
+      raffleEntriesCache = [];
+      populateAdvisorFilter();
+      populateUnitFilter();
+      renderDashboard();
+    }
+    // If we already rendered from cache, the manager still has a fully
+    // working (if slightly stale) dashboard — that's the whole point.
+  }
 }
 
 // ── CONTROL CENTER (GST Day / Raffle Start Date) ────────────
@@ -1022,47 +1085,12 @@ async function saveControlCenterSettings() {
   }
 }
 
-// Fetches team logs from the backend — all units if admin, otherwise just this manager's team.
-async function refreshScopedLogs() {
-  try {
-    const url = currentManager.isAdmin
-      ? `${APPS_SCRIPT_URL}?action=getAllLogs`
-      : `${APPS_SCRIPT_URL}?action=getLogs&manager=${encodeURIComponent(currentManager.name)}`;
-    const res = await fetch(url);
-    const data = await res.json();
-    scopedLogsCache = {};
-    (data.logs || []).forEach(l => { scopedLogsCache[`${l.date}_${l.advisor.name}`] = l; });
-  } catch (err) {
-    console.error('Could not load team logs:', err);
-  }
-}
-
-// Fetches raffle (GST Day) submissions — all units if admin, otherwise just this manager's team.
-let raffleEntriesCache = [];
-async function refreshRaffleEntries() {
-  try {
-    const url = currentManager.isAdmin
-      ? `${APPS_SCRIPT_URL}?action=getAllRaffle`
-      : `${APPS_SCRIPT_URL}?action=getRaffleForManager&manager=${encodeURIComponent(currentManager.name)}`;
-    const res = await fetch(url);
-    const data = await res.json();
-    raffleEntriesCache = data.entries || [];
-  } catch (err) {
-    console.error('Could not load raffle entries:', err);
-    raffleEntriesCache = [];
-  }
-}
-
 function getScopedLogs() {
   return scopedLogsCache;
 }
 
 async function handleRefresh() {
-  await refreshScopedLogs();
-  await refreshRaffleEntries();
-  populateAdvisorFilter();
-  populateUnitFilter();
-  renderDashboard();
+  await fetchManagerBundle(true);
 }
 
 function populateUnitFilter() {
